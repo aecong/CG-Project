@@ -245,8 +245,8 @@ GLfloat XYZcolors[6][3] = { //--- 축 색상
 	{ 0.0, 0.0, 1.0 },	   	{ 0.0, 0.0, 1.0 }
 };
 
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 4.0f); //--- 카메라 위치
-glm::vec3 cameraDirection = glm::vec3(0.0f, 0.0f, 0.0f); //--- 카메라 바라보는 방향
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, -4.0f); //--- 카메라 위치
+glm::vec3 cameraDirection = glm::vec3(0.0f, 0.0f, 100.0f); //--- 카메라 바라보는 방향
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f); //--- 카메라 위쪽 방향
 
 glm::mat4 model = glm::mat4(1.0f);
@@ -348,7 +348,7 @@ void main(int argc, char** argv) //--- 윈도우 출력하고 콜백함수 설정
 	glutKeyboardFunc(Keyboard);
 	glutSpecialFunc(SpecialKeys); // 방향키 콜백 함수 등록
 	glutSpecialUpFunc(SpecialKeysUp); // 키 떼는 이벤트 처리 추가
-	glutMouseFunc(Mouse);
+	//glutMouseFunc(Mouse);
 	glutMotionFunc(Motion);
 	glutMouseWheelFunc(mouseWheel);
 
@@ -373,13 +373,16 @@ GLvoid drawScene()
 	int viewLocation = glGetUniformLocation(shaderProgramID, "view"); //--- 버텍스 세이더에서 뷰잉 변환 행렬 변수값을 받아온다.
 	int projLocation = glGetUniformLocation(shaderProgramID, "projection"); //--- 버텍스 세이더에서 투영 변환 행렬 변수값을 받아온다.
 
-	projection = glm::mat4(1.0f);
+	/*projection = glm::mat4(1.0f);
 	projection = glm::scale(projection, glm::vec3(wheel_scale, wheel_scale, wheel_scale));
 	projection = glm::rotate(projection, (float)glm::radians(x_angle + 30), glm::vec3(1.0, 0.0, 0.0));
 	projection = glm::rotate(projection, (float)glm::radians(y_angle - 30), glm::vec3(0.0, 1.0, 0.0));
 
 	unsigned int cameraLocation = glGetUniformLocation(shaderProgramID, "view");
-	glUniformMatrix4fv(cameraLocation, 1, GL_FALSE, glm::value_ptr(projection));
+	glUniformMatrix4fv(cameraLocation, 1, GL_FALSE, glm::value_ptr(projection));*/
+
+	view = glm::lookAt(cameraPos, cameraDirection, cameraUp);
+	glUniformMatrix4fv(viewLocation, 1, GL_FALSE, &view[0][0]);
 
 	glm::mat4 perspect = glm::mat4(1.0f);
 	perspect = glm::perspective(glm::radians(fovy), (float)windowWidth / (float)windowHeight, near_1, far_1);
@@ -600,36 +603,58 @@ void moveSphere()
 int movingMouse = -1;
 float beforeX, beforeY;
 
-GLvoid Mouse(int button, int state, int x, int y)
-{
-	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN)
-	{
-		ox = x;
-		oy = y;
-		left_button = true;
-	}
-	else
-	{
-		ox = 0;
-		oy = 0;
-		pre_x_angle = x_angle;
-		pre_y_angle = y_angle;
-		left_button = false;
-	}
-}
+//GLvoid Mouse(int button, int state, int x, int y)
+//{
+//	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN)
+//	{
+//		ox = x;
+//		oy = y;
+//		left_button = true;
+//	}
+//	else
+//	{
+//		ox = 0;
+//		oy = 0;
+//		pre_x_angle = x_angle;
+//		pre_y_angle = y_angle;
+//		left_button = false;
+//	}
+//}
+
+//GLvoid Motion(int x, int y)
+//{
+//	if (left_button)
+//	{
+//		y_angle = x - ox;
+//		x_angle = y - oy;
+//		x_angle += pre_x_angle;
+//		y_angle += pre_y_angle;
+//
+//		y_angle /= 2;
+//		x_angle /= 2;
+//	}
+//	glutPostRedisplay();
+//}
+
+float cameraDistance = 15.0f; // 구와의 거리
+float cameraHeight = 3.0f; // 카메라의 높이
+float cameraAngle = 180.0f; // 카메라 각도
 
 GLvoid Motion(int x, int y)
 {
-	if (left_button)
-	{
-		y_angle = x - ox;
-		x_angle = y - oy;
-		x_angle += pre_x_angle;
-		y_angle += pre_y_angle;
+	ox = x;
+	oy = y;
+	left_button = true;
+	
+	float x_diff = x - ox;
+	float y_diff = y - oy;
+	cameraDirection += x_diff / 2;
 
-		y_angle /= 2;
-		x_angle /= 2;
-	}
+	// 카메라 높이와 거리를 구와의 상대적인 위치로 설정
+	cameraPos.x = sphere.worldmatrix.position.x + cameraDistance * sin(glm::radians(cameraAngle));
+	cameraPos.y = sphere.worldmatrix.position.y + cameraHeight;
+	cameraPos.z = sphere.worldmatrix.position.z + cameraDistance * cos(glm::radians(cameraAngle));
+	
 	glutPostRedisplay();
 }
 
@@ -656,6 +681,8 @@ GLvoid WindowToOpenGL(int mouseX, int mouseY, float& x, float& y)
 	y = 1.0f - (2.0f * mouseY) / windowHeight;
 }
 
+glm::vec3 prevSpherePosition = sphere.worldmatrix.position;
+
 GLvoid TimerFunction(int value)
 {
 	switch (value)
@@ -666,6 +693,14 @@ GLvoid TimerFunction(int value)
 
 		sphere.worldmatrix.position.y += jumpVelocity; // 구에 점프 속도 적용
 		sphere.worldmatrix.scale = glm::vec3(1.0f, 1.0f+jumpVelocity, 1.0f);
+
+		// 카메라 위치 조정
+		cameraPos.x = sphere.worldmatrix.position.x + cameraDistance * sin(glm::radians(cameraAngle));
+		cameraPos.y = sphere.worldmatrix.position.y + cameraHeight;
+		cameraPos.z = sphere.worldmatrix.position.z + cameraDistance * cos(glm::radians(cameraAngle));
+
+		//// 카메라가 구를 바라보도록 방향 설정
+		//cameraDirection = glm::normalize(sphere.worldmatrix.position - cameraPos);
 
 		// 중력 적용
 		jumpVelocity -= gravity;
