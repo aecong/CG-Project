@@ -181,9 +181,9 @@ struct SPHERE :OBJECT
 		{
 			double random_color = dis(gen);
 
-			colordata[i].x = dis(gen);
-			colordata[i].y = dis(gen);
-			colordata[i].z = dis(gen);
+			colordata[i].x = 1.0;
+			colordata[i].y = 1.0;
+			colordata[i].z = 1.0;
 		}
 		glGenVertexArrays(1, &vao); //--- VAO 를 지정하고 할당하기
 		glBindVertexArray(vao); //--- VAO를 바인드하기
@@ -285,8 +285,15 @@ float w, a, s, d;
 float speed = 0.05;
 int JSelection = 0;
 int JCnt = 0;
-float jumpSize = 0.05;
-BOOL keyStates[256];
+float jumpSize = 0.1;
+const float gravity = 0.01f; // 중력 가속도
+const float initialHeight = 0.5f; // 초기 높이
+const float jumpInitialVelocity = 0.3f; // 초기 점프 속도
+float jumpVelocity = jumpInitialVelocity; // 점프 속도를 변화시킬 변수
+bool upKeyPressed = false;
+bool downKeyPressed = false;
+bool leftKeyPressed = false;
+bool rightKeyPressed = false;
 
 void make_shaderProgram();
 void make_vertexShaders();
@@ -302,7 +309,7 @@ GLvoid Motion(int x, int y);
 GLvoid TimerFunction(int value);
 GLvoid SpecialKeys(int key, int x, int y);
 GLvoid mouseWheel(int button, int dir, int x, int y);
-void checkKey();
+GLvoid SpecialKeysUp(int key, int x, int y);
 
 void main(int argc, char** argv) //--- 윈도우 출력하고 콜백함수 설정
 {
@@ -339,7 +346,8 @@ void main(int argc, char** argv) //--- 윈도우 출력하고 콜백함수 설정
 	glutDisplayFunc(drawScene);
 	glutReshapeFunc(Reshape);
 	glutKeyboardFunc(Keyboard);
-	//glutSpecialFunc(SpecialKeys); // 방향키 콜백 함수 등록
+	glutSpecialFunc(SpecialKeys); // 방향키 콜백 함수 등록
+	glutSpecialUpFunc(SpecialKeysUp); // 키 떼는 이벤트 처리 추가
 	glutMouseFunc(Mouse);
 	glutMotionFunc(Motion);
 	glutMouseWheelFunc(mouseWheel);
@@ -521,20 +529,11 @@ char* filetobuf(const char* file)
 	return buf; // Return the buffer 
 }
 
+//위 z+ 왼 x+
+
 GLvoid Keyboard(unsigned char key, int x, int y)
 {
 	switch (key) {
-	case 'w':
-		sphere.worldmatrix.position.z += speed;
-	case 'a':
-		sphere.worldmatrix.position.x -= speed;
-		break;
-	case 's':
-		sphere.worldmatrix.position.z -= speed;
-		break;
-	case 'd':
-		sphere.worldmatrix.position.x += speed;
-		break;
 	case 'q':
 		glutLeaveMainLoop();
 		break;
@@ -546,19 +545,56 @@ GLvoid SpecialKeys(int key, int x, int y)
 {
 	switch (key) {
 	case GLUT_KEY_UP:
-		sphere.worldmatrix.position.z += speed;
+		upKeyPressed = true;
 		break;
 	case GLUT_KEY_DOWN:
-		sphere.worldmatrix.position.z -= speed;
+		downKeyPressed = true;
 		break;
 	case GLUT_KEY_LEFT:
-		sphere.worldmatrix.position.x -= speed;
+		leftKeyPressed = true;
 		break;
 	case GLUT_KEY_RIGHT:
-		sphere.worldmatrix.position.x += speed;
+		rightKeyPressed = true;
 		break;
 	}
 	glutPostRedisplay(); // 화면 갱신
+}
+
+GLvoid SpecialKeysUp(int key, int x, int y) {
+	switch (key) {
+	case GLUT_KEY_UP:
+		upKeyPressed = false;
+		break;
+	case GLUT_KEY_DOWN:
+		downKeyPressed = false;
+		break;
+	case GLUT_KEY_LEFT:
+		leftKeyPressed = false;
+		break;
+	case GLUT_KEY_RIGHT:
+		rightKeyPressed = false;
+		break;
+	}
+}
+
+void moveSphere()
+{
+	if (upKeyPressed)
+	{
+		sphere.worldmatrix.position.z += speed;
+	}
+	if (downKeyPressed)
+	{
+		sphere.worldmatrix.position.z -= speed;
+	}
+	if (leftKeyPressed)
+	{
+		sphere.worldmatrix.position.x += speed;
+	}
+	if (rightKeyPressed)
+	{
+		sphere.worldmatrix.position.x -= speed;
+	}
 }
 
 int movingMouse = -1;
@@ -625,26 +661,21 @@ GLvoid TimerFunction(int value)
 	switch (value)
 	{
 	case 1:
-		checkKey();
 
-		if (JSelection == 0)
-		{
-			sphere.worldmatrix.position.y += jumpSize;
-			JCnt++;
-			if (JCnt > 70)
-			{
-				JSelection = 1;
-			}
+		moveSphere();
+
+		sphere.worldmatrix.position.y += jumpVelocity; // 구에 점프 속도 적용
+		sphere.worldmatrix.scale = glm::vec3(1.0f, 1.0f+jumpVelocity, 1.0f);
+
+		// 중력 적용
+		jumpVelocity -= gravity;
+
+		// 땅에 닿았을 때의 처리
+		if (sphere.worldmatrix.position.y <= initialHeight) {
+			sphere.worldmatrix.position.y = initialHeight;
+			jumpVelocity = jumpInitialVelocity; // 다시 초기 점프 속도로 설정
 		}
-		if (JSelection == 1)
-		{
-			sphere.worldmatrix.position.y -= jumpSize;
-			JCnt--;
-			if (JCnt < 0)
-			{
-				JSelection = 0;
-			}
-		}
+
 		break;
 	}
 	glutPostRedisplay();
@@ -652,23 +683,3 @@ GLvoid TimerFunction(int value)
 }
 
 //update() : 아예 데이터를 바꾸고 싶을때 쓴다.
-
-void checkKey()
-{
-	if (keyStates[VK_LEFT])
-	{
-		sphere.worldmatrix.position.x -= speed;
-	}
-	if (keyStates[VK_RIGHT])
-	{
-		sphere.worldmatrix.position.x += speed;
-	}
-	if (keyStates[VK_UP])
-	{
-		sphere.worldmatrix.position.z += speed;
-	}
-	if (keyStates[VK_DOWN])
-	{
-		sphere.worldmatrix.position.z -= speed;
-	}
-}
