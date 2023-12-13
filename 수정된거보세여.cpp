@@ -1,4 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS //--- 프로그램 맨 앞에 선언할 것
+#define _USE_MATH_DEFINES
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
@@ -25,12 +26,13 @@ struct Transform
 	glm::vec3 position;
 	glm::vec3 rotation;
 	glm::vec3 revolution;
+	glm::vec3 axis = glm::vec3(0.0, 0.0, 0.0);
 	glm::vec3 scale = glm::vec3(1.0, 1.0, 1.0);
 
 	glm::mat4 GetTransform()
 	{
 		glm::mat4 RVX = glm::rotate(glm::mat4(1.0f), (float)glm::radians(revolution.x), glm::vec3(1.0, 0.0, 0.0));
-		glm::mat4 RVY = glm::rotate(glm::mat4(1.0f), (float)glm::radians(revolution.y), glm::vec3(0.0, 1.0, 0.0));
+		glm::mat4 RVY = glm::rotate(glm::mat4(1.0f), (float)glm::radians(revolution.y), glm::vec3(axis.x, 1.0, axis.z));
 		glm::mat4 RVZ = glm::rotate(glm::mat4(1.0f), (float)glm::radians(revolution.z), glm::vec3(0.0, 0.0, 1.0));
 		glm::mat4 T = glm::translate(glm::mat4(1.0f), position);
 		glm::mat4 S = glm::scale(glm::mat4(1.0), scale);
@@ -361,13 +363,13 @@ void main(int argc, char** argv) //--- 윈도우 출력하고 콜백함수 설정
 	//glEnable(GL_CULL_FACE); //--- 상태 설정은 필요한 곳에서 하면 된다.
 	//glDisable(GL_DEPTH_TEST | GL_CULL_FACE);	//해제
 
-	//돌아가는 판때기 위치 반지름 2.5 -> 원판으로 수정
+	//돌아가는 판때기 위치  > 반지름 2.5 -> 원판으로 수정
 	float xOffsets[] = { -5, 0, 5, -2.5, 2.5, -5, 0, 5 };
 	float zOffsets[] = { 0, 0, 0, 5, 5, 10, 10, 10 };
 	for (int i = 0; i < 8; ++i) {
 		rotatePlane[i].worldmatrix.position.x = xOffsets[i];
 		rotatePlane[i].worldmatrix.position.z = sphere.worldmatrix.position.z + zOffsets[i];
-		rotatePlane[i].worldmatrix.scale = glm::vec3(4, 0.4, 4);
+		rotatePlane[i].worldmatrix.scale = glm::vec3(4, 0.4, 4); //1.0 을 4배 신축
 	}
 	//나왔다가 사라지기 위치
 	for (int i = 0; i < 5; ++i) {
@@ -511,6 +513,7 @@ void InitBuffer()
 		}
 	}
 	sphere.Init();
+	sphere.modelmatrix.scale = glm::vec3(0.5, 0.5, 0.5);
 	minicube.worldmatrix.position.z = -3;
 	minicube.modelmatrix.scale = glm::vec3(0.5, 0.5, 0.5);
 }
@@ -741,16 +744,25 @@ GLvoid WindowToOpenGL(int mouseX, int mouseY, float& x, float& y)
 }
 
 glm::vec3 prevSpherePosition = sphere.worldmatrix.position;
-//충돌체크하려고 햇는데 ㅠ
-bool XZBoundingBox(CUBE obstalce[]) {
-	for (int i = 0; i < 8; ++i) {
-		if (obstalce[i].worldmatrix.position.x - 2.5 < sphere.worldmatrix.position.x + 0.5 &&
-			obstalce[i].worldmatrix.position.x + 2.5 > sphere.worldmatrix.position.x - 0.5 &&
-			obstalce[i].worldmatrix.position.z + 2.5 > sphere.worldmatrix.position.z - 0.5 &&
-			obstalce[i].worldmatrix.position.z - 2.5 < sphere.worldmatrix.position.z + 0.5) {
-			return true;
-		}
+//돌아가는 판때기
+bool XZBoundingBox(CUBE obstalce[], int index, float r) {
+	if (obstalce[index].worldmatrix.position.x - r < sphere.worldmatrix.position.x &&
+		obstalce[index].worldmatrix.position.x + r > sphere.worldmatrix.position.x &&
+		obstalce[index].worldmatrix.position.z + r > sphere.worldmatrix.position.z &&
+		obstalce[index].worldmatrix.position.z - r < sphere.worldmatrix.position.z) {
+		return true;
 	}
+	else return false;
+}
+//나왔다가 사라지기
+bool XZBoundingBox2(CUBE obstalce[5][5], int i, int j, float r) {
+	if (obstalce[i][j].worldmatrix.position.x - r < sphere.worldmatrix.position.x &&
+		obstalce[i][j].worldmatrix.position.x + r > sphere.worldmatrix.position.x &&
+		obstalce[i][j].worldmatrix.position.z + r > sphere.worldmatrix.position.z &&
+		obstalce[i][j].worldmatrix.position.z - r < sphere.worldmatrix.position.z) {
+		return true;
+	}
+	else return false;
 }
 GLvoid TimerFunction(int value)
 {
@@ -780,22 +792,33 @@ GLvoid TimerFunction(int value)
 			jumpVelocity = jumpInitialVelocity; // 다시 초기 점프 속도로 설정
 		}
 
-		//돌아가는 판때기
-		float angle[8] = { 5.0f,-5.0f,5.0f,-5.0f,5.0f,-5.0f,-5.0f,5.0f };
+		//돌아가는 판때기 z 값이 0 ~ 5
+		float angle[8] = { 2.5f,-2.5f,2.5f,-2.5f,2.5f,-2.5f,-2.5f,2.5f };
 		for (int i = 0; i < 8; ++i) {
 			rotatePlane[i].worldmatrix.rotation.y += angle[i];
 			if (rotatePlane[i].worldmatrix.rotation.y > 360.0f || rotatePlane[i].worldmatrix.rotation.y < -360.0f) rotatePlane[i].worldmatrix.rotation.y = 0;
-			if (XZBoundingBox(rotatePlane)) {
-				sphere.worldmatrix.revolution.y += angle[i];
-				if (sphere.worldmatrix.revolution.y > 360.0f || sphere.worldmatrix.revolution.y < -360.0f) sphere.worldmatrix.revolution.y = 0;
-			}		
+			//충돌을 해보야요
+			if (!upKeyPressed && !downKeyPressed && !rightKeyPressed && !leftKeyPressed && XZBoundingBox(rotatePlane ,i, 2.5)) {
+				sphere.worldmatrix.position.x = rotatePlane[i].worldmatrix.position.x + 1.25 * cos(-rotatePlane[i].worldmatrix.rotation.y * M_PI / 180.0);
+				sphere.worldmatrix.position.z = rotatePlane[i].worldmatrix.position.z + 1.25 * sin(-rotatePlane[i].worldmatrix.rotation.y * M_PI / 180.0);
+			}
 		}
 		
-		//나왔다가 사라지기
+		//나왔다가 사라지기 z 값이 5 ~ 10
 		int x = rand() % 5;
 		int y = rand() % 5;
 		if (!show[x][y]) show[x][y] = true;
 		else show[x][y] = false;
+		for (int i = 0; i < 5; ++i) {
+			for (int j = 0; j < 5; ++j) {
+				if (!show[i][j] && XZBoundingBox2(showonoffPlane, i, j, 1.25)) {
+					//밑으로 떨어지기
+					cout << "떨어져용" << endl;
+				}
+			}
+		}
+		
+
 		break;
 	}
 	glutPostRedisplay();
